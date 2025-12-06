@@ -26,12 +26,14 @@ class Settings(BaseSettings):
     SERVER_PORT: int = 8000
     DEBUG: bool = True
     
-    # CORS Settings
+    # CORS Settings - Updated for frontend integration
     BACKEND_CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:8080",
         "http://localhost:5173",
         "http://127.0.0.1:8080",
         "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ]
     
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")

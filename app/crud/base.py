@@ -41,11 +41,26 @@ class CRUDBase(Generic[ModelType]):
     
     async def create(self, db: AsyncSession, *, obj_in: dict) -> ModelType:
         """Create a new record"""
-        db_obj = self.model(**obj_in)
-        db.add(db_obj)
-        await db.commit()
-        await db.refresh(db_obj)
-        return db_obj
+        try:
+            db_obj = self.model(**obj_in)
+            db.add(db_obj)
+            await db.commit()
+            await db.refresh(db_obj)
+            return db_obj
+        except IntegrityError as e:
+            await db.rollback()
+            logger.error(f"Integrity error creating {self.model.__name__}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Failed to create record: constraint violation"
+            ) from e
+        except OperationalError as e:
+            await db.rollback()
+            logger.error(f"Operational error creating {self.model.__name__}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database connection error. Please try again."
+            ) from e
     
     async def update(
         self,
@@ -55,12 +70,27 @@ class CRUDBase(Generic[ModelType]):
         obj_in: dict
     ) -> ModelType:
         """Update an existing record"""
-        for field, value in obj_in.items():
-            setattr(db_obj, field, value)
-        db.add(db_obj)
-        await db.commit()
-        await db.refresh(db_obj)
-        return db_obj
+        try:
+            for field, value in obj_in.items():
+                setattr(db_obj, field, value)
+            db.add(db_obj)
+            await db.commit()
+            await db.refresh(db_obj)
+            return db_obj
+        except IntegrityError as e:
+            await db.rollback()
+            logger.error(f"Integrity error updating {self.model.__name__}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Failed to update record: constraint violation"
+            ) from e
+        except OperationalError as e:
+            await db.rollback()
+            logger.error(f"Operational error updating {self.model.__name__}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database connection error. Please try again."
+            ) from e
     
     async def delete(self, db: AsyncSession, *, id: str) -> Optional[ModelType]:
         """Delete a record by ID"""

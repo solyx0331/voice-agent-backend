@@ -65,7 +65,12 @@ class Settings(BaseSettings):
         return v if isinstance(v, list) else []
     
     # Database Settings
-    DATABASE_URL: str = "postgresql://postgres:oVm8mSmfnSGOTACl@db.grxzzijboqadlibsaxqa.supabase.co:5432/postgres"
+    # Set DATABASE_URL in .env file or environment variable
+    # Example for local: postgresql://postgres:postgres@localhost:5432/voice_ai_agent
+    # Example for Supabase: postgresql://postgres:password@db.project.supabase.co:5432/postgres
+    # NOTE: Do not hardcode credentials here - use .env file instead!
+    # SSL will be automatically added for Supabase connections
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/voice_ai_agent"
     DATABASE_ECHO: bool = False
     
     # Security Settings

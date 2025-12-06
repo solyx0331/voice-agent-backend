@@ -93,7 +93,20 @@ alembic revision --autogenerate -m "Initial migration"
 alembic upgrade head
 ```
 
-### 6. Initialize Sample Data (Optional)
+### 6. Test Database Connection (Optional)
+
+```bash
+# Test database connection and diagnose issues
+python scripts/test_db_connection.py
+```
+
+This script will:
+- Test DNS resolution for your database hostname
+- Test port connectivity
+- Test actual database connection
+- Provide troubleshooting guidance if connection fails
+
+### 7. Initialize Sample Data (Optional)
 
 ```bash
 # Run initialization script

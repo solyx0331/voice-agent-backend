@@ -9,9 +9,14 @@ from fastapi.exceptions import RequestValidationError
 from pathlib import Path
 from contextlib import asynccontextmanager
 from app.core.config import settings
-from app.core.exceptions import validation_exception_handler, http_exception_handler
+from app.core.exceptions import (
+    validation_exception_handler,
+    http_exception_handler,
+    database_exception_handler
+)
 from app.core.database import init_db, close_db
 from app.api.v1.api import api_router
+from sqlalchemy.exc import DatabaseError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -53,6 +58,7 @@ app.add_middleware(
 
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(DatabaseError, database_exception_handler)
 
 upload_dir = Path("uploads")
 upload_dir.mkdir(exist_ok=True)
@@ -75,20 +81,45 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     from app.core.database import engine
+    from app.core.config import settings
     from sqlalchemy import text
     
     db_status = "unknown"
+    db_error = None
     try:
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
-        db_status = f"disconnected: {str(e)[:100]}"
+        error_str = str(e)
+        db_status = "disconnected"
+        if "getaddrinfo failed" in error_str or "11001" in error_str:
+            db_error = "DNS resolution failed - cannot resolve database hostname"
+        elif "authentication failed" in error_str.lower():
+            db_error = "Authentication failed - check database credentials"
+        elif "connection refused" in error_str.lower():
+            db_error = "Connection refused - database server unreachable"
+        else:
+            db_error = error_str[:150]
     
-    return {
+    response = {
         "status": "healthy",
-        "database": db_status
+        "database": {
+            "status": db_status,
+        }
     }
+    
+    if db_error:
+        response["database"]["error"] = db_error
+        # Mask sensitive info from URL
+        db_url = settings.DATABASE_URL
+        if "@" in db_url:
+            parts = db_url.split("@")
+            response["database"]["host"] = parts[-1] if len(parts) > 1 else "N/A"
+        else:
+            response["database"]["host"] = "N/A"
+    
+    return response
 
 
 if __name__ == "__main__":

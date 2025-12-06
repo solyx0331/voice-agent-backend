@@ -26,7 +26,43 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment Variables
+### 3. Set Up Database
+
+You have two options for the database:
+
+#### Option A: Supabase (Recommended for Production)
+
+1. **Create a Supabase Project**
+   - Go to [supabase.com](https://supabase.com)
+   - Create a new project
+   - Wait for the database to be provisioned
+
+2. **Get Your Connection String**
+   - Go to Project Settings → Database
+   - Find the "Connection string" section
+   - Copy the "URI" connection string
+   - It will look like: `postgresql://postgres:[YOUR-PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres`
+
+3. **Update Connection String Format**
+   - Change `postgresql://` to `postgresql+psycopg://` for async support
+   - Example: `postgresql+psycopg://postgres:your_password@abc123.supabase.co:5432/postgres`
+
+#### Option B: Local PostgreSQL
+
+Install PostgreSQL if not already installed, then create the database:
+
+```bash
+# Connect to PostgreSQL
+psql -U postgres
+
+# Create database
+CREATE DATABASE voice_ai_agent;
+
+# Exit psql
+\q
+```
+
+### 4. Configure Environment Variables
 
 Copy the example environment file and update as needed:
 
@@ -35,9 +71,36 @@ copy .env.example .env
 # or on Linux/Mac: cp .env.example .env
 ```
 
-Edit `.env` file with your configuration.
+Edit `.env` file with your database configuration:
 
-### 4. Run the Application
+**For Supabase:**
+```env
+DATABASE_URL=postgresql+psycopg://postgres:[YOUR-PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres
+```
+
+**For Local PostgreSQL:**
+```env
+DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/voice_ai_agent
+```
+
+### 5. Run Database Migrations
+
+```bash
+# Create initial migration
+alembic revision --autogenerate -m "Initial migration"
+
+# Apply migrations
+alembic upgrade head
+```
+
+### 6. Initialize Sample Data (Optional)
+
+```bash
+# Run initialization script
+python -m app.db.init_db
+```
+
+### 7. Run the Application
 
 ```bash
 # Development mode (with auto-reload)
@@ -77,8 +140,19 @@ Backend/
 │   │   ├── security.py            # Authentication & security utilities
 │   │   ├── exceptions.py          # Exception handlers
 │   │   ├── dependencies.py        # Common dependencies
-│   │   └── database.py           # In-memory database (temporary)
-│   ├── models/                    # Database models (for future use)
+│   │   └── database.py           # Database connection and session management
+│   ├── models/                    # SQLAlchemy database models
+│   │   ├── base.py                # Base model with common fields
+│   │   ├── agent.py               # VoiceAgent model
+│   │   ├── contact.py             # Contact model
+│   │   └── call.py                # Call model
+│   ├── crud/                      # CRUD operations
+│   │   ├── base.py                # Base CRUD class
+│   │   ├── agent.py               # Agent CRUD operations
+│   │   ├── contact.py             # Contact CRUD operations
+│   │   └── call.py                # Call CRUD operations
+│   ├── db/                        # Database utilities
+│   │   └── init_db.py             # Database initialization script
 │   └── schemas/                   # Pydantic schemas
 │       ├── common.py              # Common schemas
 │       ├── agent.py               # Agent schemas
@@ -86,6 +160,11 @@ Backend/
 │       ├── contact.py             # Contact schemas
 │       ├── dashboard.py           # Dashboard schemas
 │       └── settings.py            # Settings schemas
+├── alembic/                       # Database migrations
+│   ├── versions/                  # Migration versions
+│   ├── env.py                     # Alembic environment
+│   └── script.py.mako             # Migration template
+├── alembic.ini                    # Alembic configuration
 ├── main.py                        # Application entry point
 ├── run.py                         # Development server runner
 ├── requirements.txt               # Python dependencies
@@ -112,6 +191,17 @@ Create a `.env` file in the root directory:
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 DEBUG=True
+
+# Database Settings
+# Using psycopg (psycopg3) for better Windows compatibility
+# Supports both local PostgreSQL and Supabase
+
+# For Supabase (replace with your credentials):
+# DATABASE_URL=postgresql+psycopg://postgres:[YOUR-PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres
+
+# For Local PostgreSQL:
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/voice_ai_agent
+DATABASE_ECHO=False
 
 # CORS Origins (comma-separated or JSON array)
 BACKEND_CORS_ORIGINS=["http://localhost:8080","http://localhost:5173"]
@@ -200,6 +290,57 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 ### Search
 - `GET /api/v1/search?query={query}` - Global search across agents, calls, and contacts
 
+## Database
+
+### Supabase Setup (Recommended)
+
+For production and easier setup, we recommend using Supabase. See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for detailed instructions.
+
+**Quick Setup:**
+1. Create a project at [supabase.com](https://supabase.com)
+2. Get your connection string from Project Settings → Database
+3. Update `.env` with: `DATABASE_URL=postgresql+psycopg://postgres:[PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres`
+4. Run migrations: `alembic upgrade head`
+
+### Local PostgreSQL Setup
+
+1. **Install PostgreSQL** (if not already installed)
+   - Windows: Download from [PostgreSQL website](https://www.postgresql.org/download/windows/)
+   - macOS: `brew install postgresql`
+   - Linux: `sudo apt-get install postgresql`
+
+2. **Create Database**
+   ```bash
+   psql -U postgres
+   CREATE DATABASE voice_ai_agent;
+   \q
+   ```
+
+3. **Run Migrations**
+   ```bash
+   # Create initial migration
+   alembic revision --autogenerate -m "Initial migration"
+   
+   # Apply migrations
+   alembic upgrade head
+   ```
+
+4. **Initialize Sample Data** (Optional)
+   ```bash
+   python -m app.db.init_db
+   ```
+
+### Database Models
+
+- **VoiceAgent**: Voice agent configurations and settings
+- **Contact**: Contact information and metadata
+- **Call**: Call records with transcripts and metrics
+
+All models include:
+- UUID primary keys
+- `created_at` and `updated_at` timestamps
+- Proper relationships and foreign keys
+
 ## Development
 
 ### Code Style
@@ -208,6 +349,22 @@ This project follows PEP 8 style guidelines. Consider using:
 - `black` for code formatting
 - `flake8` or `pylint` for linting
 - `mypy` for type checking
+
+### Database Migrations
+
+When making changes to models:
+
+```bash
+# Create a new migration
+alembic revision --autogenerate -m "Description of changes"
+
+# Review the generated migration file
+# Then apply it
+alembic upgrade head
+
+# Rollback if needed
+alembic downgrade -1
+```
 
 ## License
 

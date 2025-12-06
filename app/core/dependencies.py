@@ -1,9 +1,7 @@
 """
 Common dependencies
 """
-from typing import Generator
 import aiofiles
-import os
 from pathlib import Path
 
 

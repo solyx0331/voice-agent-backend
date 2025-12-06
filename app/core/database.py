@@ -1,94 +1,104 @@
 """
-In-memory database storage (temporary until real database is implemented)
+Database connection and session management
 """
-from typing import List, Dict, Any
-from app.schemas.agent import VoiceAgent
-from app.schemas.call import Call
-from app.schemas.contact import Contact
+import logging
+from urllib.parse import quote_plus
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.exc import OperationalError
+from app.core.config import settings
 
-# Shared in-memory storage
-agents_db: List[VoiceAgent] = []
-calls_db: List[Call] = []
-contacts_db: List[Contact] = []
+logger = logging.getLogger(__name__)
 
 
-def init_sample_data():
-    """Initialize with sample data"""
-    global agents_db, calls_db, contacts_db
+def prepare_database_url(url: str) -> str:
+    """
+    Encode database URL, handling special characters in password.
+    Converts to postgresql+psycopg:// for async support.
+    """
+    if "://" not in url:
+        return url
     
-    if not agents_db:
-        agents_db.extend([
-            VoiceAgent(
-                id="1",
-                name="Support Bot",
-                description="Handles customer support inquiries",
-                status="active",
-                calls=120,
-                avg_duration="4:32"
-            ),
-            VoiceAgent(
-                id="2",
-                name="Sales Bot",
-                description="Handles sales inquiries and lead qualification",
-                status="active",
-                calls=95,
-                avg_duration="5:15"
-            ),
-        ])
+    scheme, rest = url.split("://", 1)
     
-    if not contacts_db:
-        contacts_db.extend([
-            Contact(
-                id="1",
-                name="John Doe",
-                email="john.doe@example.com",
-                phone="+1 (555) 123-4567",
-                company="Acme Corp",
-                status="active",
-                total_calls=5,
-                last_contact="2024-01-15"
-            ),
-            Contact(
-                id="2",
-                name="Jane Smith",
-                email="jane.smith@example.com",
-                phone="+1 (555) 987-6543",
-                company="Tech Inc",
-                status="lead",
-                total_calls=2,
-                last_contact="2024-01-14"
-            ),
-        ])
+    if "@" not in rest:
+        if scheme == "postgresql":
+            return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        elif scheme == "postgresql+asyncpg":
+            return url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
+        return url
     
-    if not calls_db:
-        calls_db.extend([
-            Call(
-                id="1",
-                contact="John Doe",
-                phone="+1 (555) 123-4567",
-                agent="Support Bot",
-                agent_id="1",
-                type="inbound",
-                duration="4:32",
-                date="2024-01-15",
-                time="14:30",
-                status="completed",
-                recording=True,
-                outcome="success"
-            ),
-            Call(
-                id="2",
-                contact="Jane Smith",
-                phone="+1 (555) 987-6543",
-                agent="Sales Bot",
-                agent_id="2",
-                type="outbound",
-                duration="5:15",
-                date="2024-01-15",
-                time="15:45",
-                status="completed",
-                recording=True,
-                outcome="success"
-            ),
-        ])
+    parts = rest.rsplit("@", 1)
+    if len(parts) != 2:
+        return url
+    
+    credentials, host_part = parts
+    
+    if ":" in credentials:
+        username, password = credentials.split(":", 1)
+        username = quote_plus(username)
+        password = quote_plus(password)
+        encoded_url = f"{scheme}://{username}:{password}@{host_part}"
+    else:
+        username = quote_plus(credentials)
+        encoded_url = f"{scheme}://{username}@{host_part}"
+    
+    if scheme == "postgresql":
+        encoded_url = encoded_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif scheme == "postgresql+asyncpg":
+        encoded_url = encoded_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
+    
+    return encoded_url
 
+
+database_url = prepare_database_url(settings.DATABASE_URL)
+
+engine = create_async_engine(
+    database_url,
+    echo=settings.DATABASE_ECHO,
+    future=True,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
+
+Base = declarative_base()
+
+
+async def get_db() -> AsyncSession:
+    """Get database session"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+async def init_db():
+    """Initialize database - create all tables"""
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database initialized successfully")
+    except OperationalError as e:
+        logger.error(f"Failed to connect to database: {e}")
+        logger.warning("Application will continue without database connection. Some features may not work.")
+    except Exception as e:
+        logger.error(f"Unexpected error during database initialization: {e}")
+        logger.warning("Application will continue without database connection. Some features may not work.")
+
+
+async def close_db():
+    """Close database connections"""
+    await engine.dispose()

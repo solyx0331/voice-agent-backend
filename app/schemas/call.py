@@ -3,7 +3,6 @@ Call-related schemas
 """
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
-from datetime import datetime
 
 
 class TranscriptEntry(BaseModel):

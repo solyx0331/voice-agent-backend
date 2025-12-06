@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     SERVER_PORT: int = 8000
     DEBUG: bool = True
     
-    # CORS Settings - Updated for frontend integration
+    # CORS Settings
     BACKEND_CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:8080",
         "http://localhost:5173",
@@ -42,18 +42,15 @@ class Settings(BaseSettings):
         if v is None or v == "":
             return []
         if isinstance(v, str):
-            # Handle empty string
             v = v.strip()
             if not v:
                 return []
-            # Handle JSON array string
             if v.startswith("["):
                 import json
                 try:
                     return json.loads(v)
                 except json.JSONDecodeError:
                     pass
-            # Handle comma-separated string
             return [i.strip() for i in v.split(",") if i.strip()]
         if isinstance(v, list):
             return v
@@ -67,8 +64,9 @@ class Settings(BaseSettings):
             return [v]
         return v if isinstance(v, list) else []
     
-    # Database Settings (if needed later)
-    # DATABASE_URL: str = ""
+    # Database Settings
+    DATABASE_URL: str = "postgresql://postgres:oVm8mSmfnSGOTACl@db.grxzzijboqadlibsaxqa.supabase.co:5432/postgres"
+    DATABASE_ECHO: bool = False
     
     # Security Settings
     SECRET_KEY: str = "your-secret-key-change-in-production"

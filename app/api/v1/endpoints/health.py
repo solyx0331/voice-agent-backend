@@ -34,3 +34,4 @@ async def liveness():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+
